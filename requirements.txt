@@ -1,0 +1,12 @@
+# Company CNPJ Scraper - Python Dependencies
+
+# Web scraping and HTTP requests
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# HTML parsing
+lxml>=4.9.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
