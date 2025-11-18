@@ -24,30 +24,36 @@ def normalize_cnpj(raw: str) -> str | None:
 
 def lookup_cnpj_google(company_name: str):
     """
-    Layer 1 (Primary): Extract CNPJ from Google SERP HTML.
+    Layer 1: Extract CNPJ from Google SERP by trying multiple query variants.
     """
     try:
-        query = f"CNPJ {company_name} site:br"
-        url = "https://www.google.com/search"
-        params = {"q": query}
+        queries = [
+            f"CNPJ {company_name} site:br",
+            f"CNPJ {company_name}",
+            f"{company_name} CNPJ",
+            f"Razão Social {company_name} CNPJ",
+            f"CNPJ {company_name.split(' ')[0]}",
+        ]
 
-        resp = requests.get(url, headers=GOOGLE_HEADERS, params=params, timeout=10)
+        for q in queries:
+            url = "https://www.google.com/search"
+            params = {"q": q}
 
-        if resp.status_code != 200:
-            return None, f"Google HTTP {resp.status_code} for query '{query}'"
+            resp = requests.get(url, headers=GOOGLE_HEADERS, params=params, timeout=10)
 
-        html = resp.text
-        matches = re.findall(CNPJ_REGEX, html)
+            if resp.status_code != 200:
+                continue
 
-        if not matches:
-            return None, f"No CNPJ found in Google HTML for '{company_name}'"
+            html = resp.text
+            matches = re.findall(CNPJ_REGEX, html)
 
-        first = matches[0]
-        normalized = normalize_cnpj(first)
-        if not normalized:
-            return None, f"Found candidate '{first}', but normalization failed"
+            if matches:
+                raw = matches[0]
+                normalized = normalize_cnpj(raw)
+                if normalized:
+                    return normalized, f"Found via Google SERP using query '{q}' (raw={raw})"
 
-        return normalized, f"Found via Google SERP (raw={first})"
+        return None, f"No CNPJ found in Google HTML for any query variant for '{company_name}'"
 
     except Exception as e:
         return None, f"Google lookup error: {e!r}"
