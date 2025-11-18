@@ -7,15 +7,25 @@ Uses existing CNPJ lookup logic from the scraper modules.
 """
 
 import sys
+import logging
 from datetime import datetime
 from sheets import open_sheet
-from scraper.search import search_and_extract_cnpj
-from scraper.parser import find_all_valid_cnpjs
+from scraper.lookup import find_cnpj_layered
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 def process_row(row_num, company_name):
     """
     Process a single company and return the results.
+    
+    Uses the enhanced three-layer CNPJ lookup:
+    1. Website crawling with domain variants
+    2. Portuguese Wikipedia infobox parsing
+    3. Receita API validation for MATRIZ preference
     
     Args:
         row_num: Row number in the sheet
@@ -27,42 +37,23 @@ def process_row(row_num, company_name):
     print(f"Processing row {row_num}: {company_name}")
     
     try:
-        search_results = search_and_extract_cnpj(company_name, find_all_valid_cnpjs)
+        result = find_cnpj_layered(company_name)
         
-        cnpjs = search_results['cnpjs']
-        sources = search_results['sources']
+        result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
         
-        result = {
-            'website': '',
-            'cnpj': '',
-            'status': 'not_found',
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'notes': ''
-        }
-        
-        if len(cnpjs) == 0:
-            result['status'] = 'not_found'
-            result['notes'] = 'No CNPJ found in search results'
-            print(f"  Could not find CNPJ for {company_name}, marking as not_found")
-            
-        elif len(cnpjs) == 1:
-            result['cnpj'] = cnpjs[0]
-            result['website'] = sources[0] if sources else ''
-            result['status'] = 'success'
-            result['notes'] = 'CNPJ found successfully'
-            print(f"  Found CNPJ: {cnpjs[0]}")
-            
+        if result['status'] == 'success':
+            print(f"  Found CNPJ: {result['cnpj']}")
+        elif result['status'] == 'multiple':
+            print(f"  Found multiple CNPJs, selected: {result['cnpj']}")
         else:
-            result['cnpj'] = cnpjs[0]  # Use first one
-            result['website'] = sources[0] if sources else ''
-            result['status'] = 'ambiguous'
-            result['notes'] = f'Multiple CNPJs found: {", ".join(cnpjs)}. Using first one.'
-            print(f"  Found multiple CNPJs for {company_name}: {cnpjs}. Using first: {cnpjs[0]}")
+            print(f"  Could not find CNPJ for {company_name}, marking as not_found")
         
         return result
         
     except Exception as e:
         print(f"  Error processing {company_name}: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'website': '',
             'cnpj': '',
