@@ -1,72 +1,58 @@
+import os
 import re
-import time
 import requests
 
-GOOGLE_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/123.0 Safari/537.36"
-    ),
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-}
+CNPJ_REGEX = r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"
 
-CNPJ_REGEX = r"\d{2}\D?\d{3}\D?\d{3}\D?\d{4}\D?\d{2}"
-
-
-def normalize_cnpj(raw: str) -> str | None:
-    """Normalize any CNPJ-like string into XX.XXX.XXX/XXXX-XX."""
+def normalize_cnpj(raw: str | None) -> str | None:
+    if not raw:
+        return None
     digits = re.sub(r"\D", "", raw)
     if len(digits) != 14:
         return None
     return f"{digits[0:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:14]}"
 
-
-def lookup_cnpj_google(company_name: str):
-    """
-    Layer 1: Extract CNPJ from Google SERP by trying multiple query variants.
-    """
-    try:
-        queries = [
-            f"CNPJ {company_name} site:br",
-            f"CNPJ {company_name}",
-            f"{company_name} CNPJ",
-            f"Razão Social {company_name} CNPJ",
-            f"CNPJ {company_name.split(' ')[0]}",
-        ]
-
-        for q in queries:
-            url = "https://www.google.com/search"
-            params = {"q": q}
-
-            resp = requests.get(url, headers=GOOGLE_HEADERS, params=params, timeout=10)
-
-            if resp.status_code != 200:
-                continue
-
-            html = resp.text
-            matches = re.findall(CNPJ_REGEX, html)
-
-            if matches:
-                raw = matches[0]
-                normalized = normalize_cnpj(raw)
-                if normalized:
-                    return normalized, f"Found via Google SERP using query '{q}' (raw={raw})"
-
-        return None, f"No CNPJ found in Google HTML for any query variant for '{company_name}'"
-
-    except Exception as e:
-        return None, f"Google lookup error: {e!r}"
-
+def get_serpapi_key():
+    path = "secrets/serpapi_key.txt"
+    if not os.path.exists(path):
+        raise Exception("Missing SerpAPI key: please paste it into secrets/serpapi_key.txt")
+    with open(path, "r") as f:
+        return f.read().strip()
 
 def lookup_cnpj(company_name: str):
-    """
-    Entry point for batch runner. Only Google layer used.
-    """
-    time.sleep(1.0)  # reduce risk of Google rate limits
-    cnpj, debug = lookup_cnpj_google(company_name)
+    api_key = get_serpapi_key()
 
-    if cnpj:
-        return cnpj, "google", debug
+    params = {
+        "engine": "google",
+        "q": f"CNPJ {company_name}",
+        "hl": "pt",
+        "gl": "br",
+        "api_key": api_key,
+    }
 
-    return None, "none", debug
+    try:
+        resp = requests.get("https://serpapi.com/search", params=params, timeout=10)
+        data = resp.json()
+
+        if "answer_box" in data and isinstance(data["answer_box"], dict):
+            snippet = data["answer_box"].get("snippet", "") or data["answer_box"].get("answer", "")
+            match = re.search(CNPJ_REGEX, snippet)
+            if match:
+                return normalize_cnpj(match.group(0)), "serpapi_answer_box", snippet
+
+        for item in data.get("organic_results", []):
+            snippet = item.get("snippet", "")
+            match = re.search(CNPJ_REGEX, snippet)
+            if match:
+                return normalize_cnpj(match.group(0)), "serpapi_organic", snippet
+
+        for item in data.get("inline_results", []):
+            snippet = item.get("snippet", "")
+            match = re.search(CNPJ_REGEX, snippet)
+            if match:
+                return normalize_cnpj(match.group(0)), "serpapi_inline", snippet
+
+        return None, "none", "No CNPJ found in SerpAPI results."
+
+    except Exception as e:
+        return None, "error", f"SerpAPI error: {e}"
