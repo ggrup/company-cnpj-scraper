@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from sheets import open_sheet
 from cnpj_lookup import lookup_cnpj
-from cnpjbiz_scraper import scrape_cnpj_biz_all
+from cnpjbiz_scraper import scrape_all_entities
 
 
 def process_row(row_num, company_name):
@@ -126,13 +126,14 @@ def main():
             if result['cnpj']:
                 print(f"  Scraping CNPJ.biz for related companies...")
                 try:
-                    all_entities = scrape_cnpj_biz_all(result['cnpj'])
+                    all_entities = scrape_all_entities(result['cnpj'])
                     print(f"  Found {len(all_entities)} related entities on CNPJ.biz")
                     
                     timestamp = datetime.utcnow().isoformat() + 'Z'
                     for ent in all_entities:
                         new_row = [
                             company_name,
+                            ent["razao_social"],
                             ent["razao_social"],
                             ent["cnpj"],
                             ent["tipo"],

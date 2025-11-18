@@ -7,64 +7,95 @@ from cnpj_lookup import normalize_cnpj
 
 BASE = "https://www.cnpj.biz"
 
-HEADERS_LIST = [
-    {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"},
-    {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0"},
-    {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0 Safari/537.36"},
+USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13.5; rv:117.0) Gecko/20100101 Firefox/117.0",
 ]
 
-def get(url, retries=3):
-    for _ in range(retries):
+def fetch(url):
+    for _ in range(5):
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+            "Connection": "keep-alive",
+            "DNT": "1",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        time.sleep(random.uniform(1.8, 4.2))
+
         try:
-            headers = random.choice(HEADERS_LIST)
-            headers["Accept-Language"] = "pt-BR,pt;q=0.9"
-            headers["Accept"] = "text/html"
-            time.sleep(random.uniform(1.2, 2.8))
             r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 200:
-                return r.text
-            if r.status_code in [403, 429]:
-                time.sleep(3)
-        except:
+            text = r.text
+
+            if "Você foi bloqueado" in text or "Access Denied" in text:
+                print("[BLOCKED] CNPJ.biz blocked this request. Retrying...")
+                continue
+
+            if "<table" not in text:
+                print("[EMPTY] No table detected. Retrying...")
+                continue
+
+            return text
+
+        except Exception as e:
+            print("Error", e)
             time.sleep(2)
+
+    print(f"FAILED to fetch {url} after multiple retries.")
     return None
 
-def extract_table_rows(html):
+
+def parse_table(html):
     soup = BeautifulSoup(html, "html.parser")
     rows = []
-    for tr in soup.select("table tr"):
-        cols = [c.get_text(strip=True) for c in tr.find_all("td")]
-        if len(cols) >= 2:
-            razao = cols[0]
-            raw_cnpj = cols[1]
-            tipo = cols[-1] if len(cols) >= 3 else ""
-            cnpj = normalize_cnpj(raw_cnpj)
-            if cnpj:
-                rows.append({"razao_social": razao, "cnpj": cnpj, "tipo": tipo})
+
+    table = soup.find("table")
+    if not table:
+        return rows
+
+    for tr in table.select("tr"):
+        tds = [td.get_text(strip=True) for td in tr.select("td")]
+
+        if len(tds) < 2:
+            continue
+
+        razao = tds[0]
+        raw_cnpj = tds[1]
+        tipo = tds[-1] if len(tds) >= 3 else ""
+
+        cnpj = normalize_cnpj(raw_cnpj)
+        if cnpj:
+            rows.append({"razao_social": razao, "cnpj": cnpj, "tipo": tipo})
+
     return rows
 
-def scrape_cnpj_biz_all(main_cnpj):
+
+def scrape_all_entities(main_cnpj):
     digits = re.sub(r"\D", "", main_cnpj)
-    base_url = f"{BASE}/{digits}"
-    filiais_url = f"{BASE}/cnpj/{digits}/filiais"
-    relacionadas_url = f"{BASE}/cnpj/{digits}/empresas-relacionadas"
 
-    output = []
+    urls = [
+        f"{BASE}/{digits}",
+        f"{BASE}/cnpj/{digits}/filiais",
+        f"{BASE}/cnpj/{digits}/empresas-relacionadas",
+    ]
 
-    html = get(base_url)
-    if html:
-        output.extend(extract_table_rows(html))
+    results = []
 
-    html_f = get(filiais_url)
-    if html_f:
-        output.extend(extract_table_rows(html_f))
-
-    html_r = get(relacionadas_url)
-    if html_r:
-        output.extend(extract_table_rows(html_r))
+    for url in urls:
+        html = fetch(url)
+        if html:
+            rows = parse_table(html)
+            results.extend(rows)
+        else:
+            print(f"[NO HTML] Could not fetch {url}")
 
     unique = {}
-    for row in output:
-        unique[row["cnpj"]] = row
+    for r in results:
+        unique[r["cnpj"]] = r
 
     return list(unique.values())
