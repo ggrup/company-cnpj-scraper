@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from sheets import open_sheet
 from cnpj_lookup import lookup_cnpj
+from cnpjbiz_scraper import scrape_cnpj_biz_all
 
 
 def process_row(row_num, company_name):
@@ -121,6 +122,30 @@ def main():
             
             processed_count += 1
             print(f"  Updated row {row_num} in sheet")
+            
+            if result['cnpj']:
+                print(f"  Scraping CNPJ.biz for related companies...")
+                try:
+                    all_entities = scrape_cnpj_biz_all(result['cnpj'])
+                    print(f"  Found {len(all_entities)} related entities on CNPJ.biz")
+                    
+                    timestamp = datetime.utcnow().isoformat() + 'Z'
+                    for ent in all_entities:
+                        new_row = [
+                            company_name,
+                            ent["razao_social"],
+                            ent["cnpj"],
+                            ent["tipo"],
+                            timestamp,
+                            "cnpj.biz"
+                        ]
+                        sheet.append_row(new_row)
+                        print(f"    Added: {ent['razao_social']} ({ent['cnpj']}) - {ent['tipo']}")
+                    
+                    print(f"  Inserted {len(all_entities)} related entities")
+                except Exception as e:
+                    print(f"  Error scraping CNPJ.biz: {e}")
+            
             print()
         
         print("=" * 60)
