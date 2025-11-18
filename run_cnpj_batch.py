@@ -7,25 +7,16 @@ Uses existing CNPJ lookup logic from the scraper modules.
 """
 
 import sys
-import logging
 from datetime import datetime
 from sheets import open_sheet
-from scraper.lookup import find_cnpj_layered
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from cnpj_lookup import lookup_cnpj
 
 
 def process_row(row_num, company_name):
     """
     Process a single company and return the results.
     
-    Uses the enhanced three-layer CNPJ lookup:
-    1. Website crawling with domain variants
-    2. Portuguese Wikipedia infobox parsing
-    3. Receita API validation for MATRIZ preference
+    Uses Google SERP-based CNPJ lookup.
     
     Args:
         row_num: Row number in the sheet
@@ -37,14 +28,18 @@ def process_row(row_num, company_name):
     print(f"Processing row {row_num}: {company_name}")
     
     try:
-        result = find_cnpj_layered(company_name)
+        cnpj, source, debug = lookup_cnpj(company_name)
         
-        result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+        result = {
+            'website': source if source != 'none' else '',
+            'cnpj': cnpj if cnpj else '',
+            'status': 'success' if cnpj else 'not_found',
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'notes': debug
+        }
         
-        if result['status'] == 'success':
-            print(f"  Found CNPJ: {result['cnpj']}")
-        elif result['status'] == 'multiple':
-            print(f"  Found multiple CNPJs, selected: {result['cnpj']}")
+        if cnpj:
+            print(f"  Found CNPJ: {cnpj}")
         else:
             print(f"  Could not find CNPJ for {company_name}, marking as not_found")
         
