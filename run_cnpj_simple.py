@@ -141,14 +141,20 @@ def main():
             
             timestamp = datetime.utcnow().isoformat() + 'Z'
             
-            sheet.update(range_name=f'B{row_num}', values=[['']])
-            sheet.update(range_name=f'C{row_num}:F{row_num}', 
-                       values=[[cnpj or '', status, timestamp, notes]])
+            if cnpj and status == "ok" and len(cnpj) == 14:
+                formatted_cnpj = f"{cnpj[0:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
+                sheet.update(range_name=f'B{row_num}', values=[['Matriz']])
+                sheet.update(range_name=f'C{row_num}:F{row_num}', 
+                           values=[[formatted_cnpj, status, timestamp, notes]])
+            else:
+                sheet.update(range_name=f'B{row_num}', values=[['']])
+                sheet.update(range_name=f'C{row_num}:F{row_num}', 
+                           values=[[cnpj or '', status, timestamp, notes]])
             
             processed_count += 1
             print(f"  [Sheet] Updated row {row_num}")
             
-            if cnpj and status == "ok":
+            if cnpj and status == "ok" and len(cnpj) == 14:
                 try:
                     formatted_cnpj = f"{cnpj[0:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
                     
