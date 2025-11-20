@@ -426,11 +426,14 @@ def scrape_all_filiais(company_name: str, main_cnpj: str) -> List[Dict[str, str]
     return results
 
 
-def write_filiais_to_sheet(sheet, company_name: str, filial_entries: List[Dict[str, str]]):
+def write_filiais_to_sheet(sheet, company_name: str, filial_entries: List[Dict[str, str]], insert_after_row: Optional[int] = None) -> int:
     """
     Write filiais to Google Sheet, avoiding duplicates.
     
-    Appends new rows below the company's main row with:
+    Inserts new rows immediately below the Matriz row (if insert_after_row is provided)
+    or appends to the end of the sheet (if insert_after_row is None).
+    
+    Each filial row contains:
     - company_name: same as original
     - filial_name: extracted text (Filial/Matriz)
     - cnpj: extracted CNPJ
@@ -442,25 +445,31 @@ def write_filiais_to_sheet(sheet, company_name: str, filial_entries: List[Dict[s
         sheet: Google Sheet worksheet object
         company_name: Company name
         filial_entries: List of dicts with filial_name and cnpj keys
+        insert_after_row: (optional) Row number after which to insert filiais.
+                         If provided, filiais are inserted at row insert_after_row+1.
+                         If None, filiais are appended to the end of the sheet.
+    
+    Returns:
+        Number of rows actually inserted/appended
     """
     from datetime import datetime
     
     if not filial_entries:
         print(f"[Sheet] No filiais to write for {company_name}")
-        return
+        return 0
     
     print(f"[Sheet] Writing {len(filial_entries)} filiais for {company_name}")
     
     all_values = sheet.get_all_values()
     existing_cnpjs = set()
     
-    for row in all_values[1:]:  # Skip header
+    for row in all_values[1:]:
         if len(row) >= 3 and row[0].strip() == company_name:
-            if row[2].strip():  # Column C (cnpj)
+            if row[2].strip():
                 existing_cnpjs.add(row[2].strip())
     
     timestamp = datetime.utcnow().isoformat() + 'Z'
-    written_count = 0
+    rows_to_insert = []
     
     for entry in filial_entries:
         cnpj = entry['cnpj']
@@ -478,9 +487,21 @@ def write_filiais_to_sheet(sheet, company_name: str, filial_entries: List[Dict[s
             'DiretorioBrasil.net'
         ]
         
-        sheet.append_row(new_row)
+        rows_to_insert.append(new_row)
         existing_cnpjs.add(cnpj)
-        written_count += 1
-        print(f"  [Sheet] Added: {entry['filial_name']} - {cnpj}")
+        print(f"  [Sheet] Prepared: {entry['filial_name']} - {cnpj}")
     
-    print(f"[Sheet] ✓ Wrote {written_count} new filiais to sheet")
+    if not rows_to_insert:
+        print(f"[Sheet] No new filiais to write (all duplicates)")
+        return 0
+    
+    if insert_after_row is not None:
+        print(f"[Sheet] Inserting {len(rows_to_insert)} rows at position {insert_after_row + 1}")
+        sheet.insert_rows(rows_to_insert, row=insert_after_row + 1, value_input_option='RAW')
+    else:
+        print(f"[Sheet] Appending {len(rows_to_insert)} rows to end of sheet")
+        for new_row in rows_to_insert:
+            sheet.append_row(new_row)
+    
+    print(f"[Sheet] ✓ Wrote {len(rows_to_insert)} new filiais to sheet")
+    return len(rows_to_insert)

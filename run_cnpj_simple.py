@@ -114,9 +114,10 @@ def main():
         
         processed_count = 0
         skipped_count = 0
+        row_offset = 0  # Track how many rows have been inserted
         
         for i in range(1, len(all_values)):
-            row_num = i + 1
+            row_num = i + 1 + row_offset  # Adjust for inserted rows
             row = all_values[i]
             
             while len(row) < 6:
@@ -162,7 +163,8 @@ def main():
                     filial_entries = scrape_all_filiais(company_name, formatted_cnpj)
                     
                     if filial_entries:
-                        write_filiais_to_sheet(sheet, company_name, filial_entries)
+                        rows_inserted = write_filiais_to_sheet(sheet, company_name, filial_entries, insert_after_row=row_num)
+                        row_offset += rows_inserted  # Update offset for subsequent iterations
                     else:
                         print(f"  [Filiais] No filiais found on DiretorioBrasil")
                         
