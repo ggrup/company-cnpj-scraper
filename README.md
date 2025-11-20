@@ -1,20 +1,20 @@
 # Company CNPJ Scraper
 
-AI agent that searches for Brazilian company CNPJ numbers and saves them to a CSV file.
+AI agent that searches for Brazilian company CNPJ numbers using SerpAPI and saves them to Google Sheets.
 
 ## Overview
 
-This tool reads a list of Brazilian company names from a CSV file, searches the web for their official CNPJ numbers, and saves the results to an output CSV file. It prioritizes official sources like Receita Federal (gov.br) and company official websites.
+This tool reads a list of Brazilian company names from a Google Sheet, uses SerpAPI to find their official CNPJ numbers, and writes the results back to the same Google Sheet. It supports two modes: simple lookup (main CNPJ only) and batch processing (with filiais extraction).
 
 ## Features
 
-- 🔍 Web search for company CNPJ numbers
+- 🔍 CNPJ lookup using SerpAPI (Google search results)
 - ✅ CNPJ validation using official Brazilian algorithm
-- 📊 CSV input/output for easy data management
-- 🎯 Prioritizes official and reliable sources
+- 📊 Google Sheets integration for input/output
+- 🏢 Optional filiais (branch) extraction from CNPJ.biz
 - 📝 Detailed logging for transparency
-- ⏸️ Resume capability to continue interrupted processing
-- 🧪 Unit tests for CNPJ validation
+- ⏸️ Idempotent processing (skips rows with existing CNPJs)
+- 🔒 Secure credential management (secrets folder)
 
 ## Quick Start
 
@@ -24,110 +24,145 @@ This tool reads a list of Brazilian company names from a CSV file, searches the 
 pip install -r requirements.txt
 ```
 
-### 2. Prepare Input File
+### 2. Set Up Credentials
 
-Create a CSV file with a `company_name` column. An example is provided in `input/companies.csv`:
+Create the following files in the `secrets/` folder:
 
-```csv
-company_name
-Petrobras
-Vale
-Itaú Unibanco
+**secrets/google_credentials.json**
+- Google Service Account credentials for Sheets API access
+- Download from Google Cloud Console
+
+**secrets/serpapi_key.json**
+- Your SerpAPI key for Google search results
+```json
+{
+  "SERPAPI_KEY": "your_serpapi_key_here"
+}
+```
+
+**secrets/webshare_proxies.json** (optional, only for filiais extraction)
+- Webshare proxy list for CNPJ.biz scraping
+```json
+{
+  "proxies": [
+    "http://username:password@host:port"
+  ]
+}
 ```
 
 ### 3. Run the Scraper
 
+**Simple Mode (Main CNPJ only):**
 ```bash
-python main.py --input input/companies.csv --output data/cnpj_results.csv
+python run_cnpj_simple.py
 ```
 
-That's it! The results will be saved to `data/cnpj_results.csv`.
+**Batch Mode (With filiais extraction):**
+```bash
+python run_cnpj_batch.py
+```
+
+That's it! The results will be written to your Google Sheet.
 
 ## Usage
 
-### Basic Usage
+### Simple Mode (Recommended)
+
+Use this mode to get only the main CNPJ for each company:
 
 ```bash
-python main.py --input input/companies.csv --output data/cnpj_results.csv
+python run_cnpj_simple.py
 ```
 
-### With Verbose Logging
+This script:
+- Reads company names from column A of your Google Sheet
+- Uses SerpAPI to find the main CNPJ
+- Writes results to columns C-F (cnpj, status, timestamp, notes)
+- Skips rows that already have a CNPJ filled
+- Does NOT extract filiais (branches)
+
+### Batch Mode (Advanced)
+
+Use this mode to extract filiais and related companies:
 
 ```bash
-python main.py --input input/companies.csv --output data/results.csv --verbose
+python run_cnpj_batch.py
 ```
 
-### Resume Interrupted Processing
+This script:
+- Does everything the simple mode does
+- Additionally scrapes CNPJ.biz to find all filiais
+- Inserts new rows for each filial under the parent company
+- Requires Webshare proxies (configured in secrets/webshare_proxies.json)
 
-If the script was interrupted, you can resume from where it left off:
+**Note:** Batch mode may encounter blocking from CNPJ.biz. Use simple mode if you only need main CNPJs.
 
-```bash
-python main.py --input input/companies.csv --output data/results.csv --resume
-```
+## Google Sheet Format
 
-### Command Line Options
+Your Google Sheet should have the following columns:
 
-- `--input`: Path to input CSV file (default: `input/companies.csv`)
-- `--output`: Path to output CSV file (default: `data/cnpj_results.csv`)
-- `--verbose`: Enable detailed debug logging
-- `--resume`: Skip already processed companies
+| Column | Name | Description |
+|--------|------|-------------|
+| A | company_name | Company name to search for |
+| B | filial_name | Filial/branch name (filled by batch mode) |
+| C | cnpj | CNPJ number in format 00.000.000/0000-00 |
+| D | status | Search status (ok, not_found, error) |
+| E | timestamp | ISO timestamp of when the search was performed |
+| F | notes | Additional notes about the search |
 
-## Input Format
+### Input Format
 
-The input CSV must have a `company_name` column:
+Before running the script, your sheet should look like:
 
-```csv
-company_name
-Company Name 1
-Company Name 2
-Company Name 3
-```
+| company_name | filial_name | cnpj | status | timestamp | notes |
+|--------------|-------------|------|--------|-----------|-------|
+| Agibank | | | | | |
+| Nubank | | | | | |
+| Banco do Brasil | | | | | |
 
-## Output Format
+### Output Format (Simple Mode)
 
-The output CSV contains the following columns:
+After running `run_cnpj_simple.py`:
 
-- `company_input`: Original company name from input
-- `company_found_name`: Company name found on source (if available)
-- `cnpj`: CNPJ number in format 00.000.000/0000-00
-- `source_url`: URL where the CNPJ was found
-- `status`: Search status
-  - `found`: Single CNPJ found successfully
-  - `not_found`: No CNPJ found
-  - `ambiguous`: Multiple different CNPJs found
-- `created_at`: Timestamp of when the search was performed
+| company_name | filial_name | cnpj | status | timestamp | notes |
+|--------------|-------------|------|--------|-----------|-------|
+| Agibank | | 10.664.513/0001-50 | ok | 2025-11-20T22:30:00Z | Found via SerpAPI knowledge_graph |
+| Nubank | | 18.236.120/0001-58 | ok | 2025-11-20T22:30:15Z | Found via SerpAPI organic_results |
+| Unknown Company | | | not_found | 2025-11-20T22:30:30Z | No CNPJ found in SerpAPI |
 
-Example output:
+### Output Format (Batch Mode)
 
-```csv
-company_input,company_found_name,cnpj,source_url,status,created_at
-Petrobras,Petrobras,33.000.167/0001-01,https://example.com,found,2025-11-17T20:30:00
-Vale,Vale,33.592.510/0001-54,https://example.com,found,2025-11-17T20:30:15
-Unknown Company,,,not_found,2025-11-17T20:30:30
-```
+After running `run_cnpj_batch.py`, filiais are inserted as new rows:
+
+| company_name | filial_name | cnpj | status | timestamp | notes |
+|--------------|-------------|------|--------|-----------|-------|
+| Agibank | | 10.664.513/0001-50 | ok | 2025-11-20T22:30:00Z | Found via SerpAPI |
+| Agibank | Agibank Filial Porto Alegre | 10.664.513/0002-31 | ok | 2025-11-20T22:30:05Z | Filial from CNPJ.biz |
+| Agibank | Agibank Filial São Paulo | 10.664.513/0003-12 | ok | 2025-11-20T22:30:05Z | Filial from CNPJ.biz |
 
 ## Project Structure
 
 ```
 company-cnpj-scraper/
-├── main.py                 # CLI entry point
-├── scraper/
-│   ├── __init__.py
-│   ├── search.py          # Web search logic
-│   └── parser.py          # CNPJ extraction & validation
-├── storage/
-│   ├── __init__.py
-│   └── csv_writer.py      # CSV I/O operations
+├── run_cnpj_simple.py      # Simple mode: main CNPJ lookup only
+├── run_cnpj_batch.py       # Batch mode: with filiais extraction
+├── sheets.py               # Google Sheets API wrapper
+├── cnpj_lookup.py          # SerpAPI CNPJ lookup logic
+├── cnpjbiz_scraper.py      # CNPJ.biz scraper for filiais
+├── secrets/                # Credentials (gitignored)
+│   ├── google_credentials.json
+│   ├── serpapi_key.json
+│   └── webshare_proxies.json
+├── scraper/                # Legacy scraper modules
+│   ├── search.py
+│   └── parser.py
+├── storage/                # Legacy CSV writer
+│   └── csv_writer.py
 ├── tests/
-│   ├── __init__.py
-│   └── test_parser.py     # Unit tests
-├── input/
-│   └── companies.csv      # Example input file
-├── data/
-│   └── cnpj_results.csv   # Output file (created when you run)
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-└── ARCHITECTURE.md       # System design documentation
+│   └── test_parser.py      # Unit tests
+├── requirements.txt        # Python dependencies
+├── README.md              # This file
+└── ARCHITECTURE.md        # System design documentation
 ```
 
 ## Running Tests
@@ -146,12 +181,26 @@ pytest tests/ --cov=scraper --cov-report=html
 
 ## How It Works
 
-1. **Read Input**: Reads company names from the input CSV file
-2. **Search**: For each company, performs a web search with the query "{company_name} CNPJ"
-3. **Prioritize**: Filters and prioritizes results from official sources (gov.br, Receita Federal)
-4. **Extract**: Fetches page content and extracts CNPJ numbers using regex patterns
-5. **Validate**: Validates extracted CNPJs using the official Brazilian algorithm
-6. **Save**: Writes results to the output CSV file with status and source information
+### Simple Mode (run_cnpj_simple.py)
+
+1. **Read Input**: Opens Google Sheet and reads company names from column A
+2. **SerpAPI Search**: For each company, queries SerpAPI with "{company_name} CNPJ"
+3. **Extract CNPJ**: Tries to extract CNPJ from:
+   - Knowledge graph (legal_identifier field)
+   - Organic search results (snippets and titles)
+4. **Validate**: Validates extracted CNPJs using regex pattern
+5. **Write Results**: Updates columns C-F with CNPJ, status, timestamp, and notes
+6. **Skip Existing**: Automatically skips rows that already have a CNPJ
+
+### Batch Mode (run_cnpj_batch.py)
+
+1. **Main CNPJ Lookup**: Same as simple mode (steps 1-6)
+2. **Filiais Extraction**: For each found CNPJ:
+   - Visits CNPJ.biz using Webshare proxies
+   - Scrapes "Ver Todas as Filiais" table
+   - Extracts razão social and CNPJ for each filial
+3. **Insert Rows**: Inserts new rows below parent company for each filial
+4. **Update Sheet**: Writes all filiais to Google Sheet with proper column mapping
 
 ## CNPJ Validation
 
@@ -164,26 +213,34 @@ The tool validates CNPJ numbers using the official Brazilian algorithm with chec
 
 ## Limitations
 
-- Depends on web search quality and availability
-- May encounter rate limits from search engines (includes 1-second delays between requests)
-- Requires internet connection
-- CNPJ data may be outdated on some websites
-- Cannot solve CAPTCHAs (headless scraping only)
+- **SerpAPI Dependency**: Requires a valid SerpAPI key (paid service after free tier)
+- **Rate Limits**: SerpAPI has rate limits based on your plan
+- **CNPJ.biz Blocking**: Batch mode may be blocked by CNPJ.biz (requires residential proxies)
+- **Internet Connection**: Requires stable internet connection
+- **Google Sheets API**: Requires proper service account setup and permissions
+- **Data Accuracy**: CNPJ data depends on what's indexed by Google search
 
 ## Troubleshooting
 
-### No results found
+### "No CNPJ found in SerpAPI"
 
-- Check your internet connection
-- Try running with `--verbose` to see detailed logs
-- Some companies may not have their CNPJ publicly available online
+- Check that your SerpAPI key is valid in `secrets/serpapi_key.json`
+- Verify the company name is spelled correctly in the Google Sheet
+- Some companies may not have their CNPJ indexed by Google
+- Try searching manually on Google to verify the CNPJ exists online
 
-### Rate limiting
+### "Permission denied" or Google Sheets errors
 
-The script includes 1-second delays between requests to be respectful to servers. If you encounter rate limiting:
+- Verify `secrets/google_credentials.json` is valid
+- Check that the service account has edit access to your Google Sheet
+- Ensure the sheet ID in `sheets.py` matches your sheet
 
-- Wait a few minutes before running again
-- Use `--resume` to continue from where you left off
+### Batch mode not finding filiais
+
+- CNPJ.biz actively blocks datacenter proxies
+- Verify your Webshare proxies are working in `secrets/webshare_proxies.json`
+- Consider using residential proxies instead of datacenter proxies
+- Use simple mode if you only need main CNPJs
 
 ### Import errors
 
@@ -192,6 +249,12 @@ Make sure all dependencies are installed:
 ```bash
 pip install -r requirements.txt
 ```
+
+### SerpAPI rate limit exceeded
+
+- Check your SerpAPI plan limits at https://serpapi.com/dashboard
+- Wait for your rate limit to reset
+- The script will automatically skip rows with existing CNPJs on re-run
 
 ## Contributing
 
