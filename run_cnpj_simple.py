@@ -2,7 +2,7 @@
 """
 Simple CNPJ Lookup Script
 
-Uses SerpAPI to get main CNPJ only (no filiais extraction).
+Uses SerpAPI to get main CNPJ, then extracts filiais from DiretorioBrasil.net.
 """
 
 import sys
@@ -12,6 +12,7 @@ import re
 from datetime import datetime
 from serpapi import GoogleSearch
 from sheets import open_sheet
+from scraping.filiais_scraper import scrape_all_filiais, write_filiais_to_sheet
 
 
 def get_serpapi_key():
@@ -146,6 +147,24 @@ def main():
             
             processed_count += 1
             print(f"  [Sheet] Updated row {row_num}")
+            
+            if cnpj and status == "ok":
+                try:
+                    formatted_cnpj = f"{cnpj[0:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
+                    
+                    print(f"\n  [Filiais] Scraping DiretorioBrasil for filiais...")
+                    filial_entries = scrape_all_filiais(company_name, formatted_cnpj)
+                    
+                    if filial_entries:
+                        write_filiais_to_sheet(sheet, company_name, filial_entries)
+                    else:
+                        print(f"  [Filiais] No filiais found on DiretorioBrasil")
+                        
+                except Exception as e:
+                    print(f"  [Filiais] Error scraping filiais: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
             print()
         
         print("=" * 60)
