@@ -1,10 +1,11 @@
 import os
 import re
 import requests
+from typing import Optional
 
 CNPJ_REGEX = r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"
 
-def normalize_cnpj(raw: str | None) -> str | None:
+def normalize_cnpj(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None
     digits = re.sub(r"\D", "", raw)
