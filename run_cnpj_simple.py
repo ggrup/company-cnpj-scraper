@@ -114,9 +114,10 @@ def main():
         
         processed_count = 0
         skipped_count = 0
+        row_offset = 0  # Track how many rows have been inserted
         
         for i in range(1, len(all_values)):
-            row_num = i + 1
+            row_num = i + 1 + row_offset  # Adjust for inserted rows
             row = all_values[i]
             
             while len(row) < 6:
@@ -141,14 +142,20 @@ def main():
             
             timestamp = datetime.utcnow().isoformat() + 'Z'
             
-            sheet.update(range_name=f'B{row_num}', values=[['']])
-            sheet.update(range_name=f'C{row_num}:F{row_num}', 
-                       values=[[cnpj or '', status, timestamp, notes]])
+            if cnpj and status == "ok" and len(cnpj) == 14:
+                formatted_cnpj = f"{cnpj[0:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
+                sheet.update(range_name=f'B{row_num}', values=[['Matriz']])
+                sheet.update(range_name=f'C{row_num}:F{row_num}', 
+                           values=[[formatted_cnpj, status, timestamp, notes]])
+            else:
+                sheet.update(range_name=f'B{row_num}', values=[['']])
+                sheet.update(range_name=f'C{row_num}:F{row_num}', 
+                           values=[[cnpj or '', status, timestamp, notes]])
             
             processed_count += 1
             print(f"  [Sheet] Updated row {row_num}")
             
-            if cnpj and status == "ok":
+            if cnpj and status == "ok" and len(cnpj) == 14:
                 try:
                     formatted_cnpj = f"{cnpj[0:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
                     
@@ -156,7 +163,8 @@ def main():
                     filial_entries = scrape_all_filiais(company_name, formatted_cnpj)
                     
                     if filial_entries:
-                        write_filiais_to_sheet(sheet, company_name, filial_entries)
+                        rows_inserted = write_filiais_to_sheet(sheet, company_name, filial_entries, insert_after_row=row_num)
+                        row_offset += rows_inserted  # Update offset for subsequent iterations
                     else:
                         print(f"  [Filiais] No filiais found on DiretorioBrasil")
                         

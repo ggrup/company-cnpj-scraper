@@ -1,20 +1,23 @@
 # Company CNPJ Scraper
 
-AI agent that searches for Brazilian company CNPJ numbers using SerpAPI and saves them to Google Sheets.
+AI agent that searches for Brazilian company CNPJ numbers using SerpAPI and extracts all branch offices (filiais) from DiretorioBrasil.net, saving results to Google Sheets.
 
 ## Overview
 
-This tool reads a list of Brazilian company names from a Google Sheet, uses SerpAPI to find their official CNPJ numbers, and writes the results back to the same Google Sheet. It supports two modes: simple lookup (main CNPJ only) and batch processing (with filiais extraction).
+This tool reads a list of Brazilian company names from a Google Sheet, uses SerpAPI to find their official CNPJ numbers, then automatically extracts all filiais (branch offices) from DiretorioBrasil.net. All results are written back to the same Google Sheet with proper organization and formatting.
 
 ## Features
 
-- 🔍 CNPJ lookup using SerpAPI (Google search results)
-- ✅ CNPJ validation using official Brazilian algorithm
-- 📊 Google Sheets integration for input/output
-- 🏢 Optional filiais (branch) extraction from CNPJ.biz
-- 📝 Detailed logging for transparency
-- ⏸️ Idempotent processing (skips rows with existing CNPJs)
-- 🔒 Secure credential management (secrets folder)
+- 🔍 **Main CNPJ lookup** using SerpAPI (Google search results)
+- 🏢 **Automatic filiais extraction** from DiretorioBrasil.net with anti-blocking measures
+- 📊 **Google Sheets integration** for input/output with real-time updates
+- 🎯 **Smart organization** - filiais grouped immediately below their Matriz (headquarters)
+- ✅ **CNPJ validation** using official Brazilian algorithm
+- 🔄 **CNPJ formatting** - displays CNPJs in standard Brazilian format (XX.XXX.XXX/XXXX-XX)
+- 🛡️ **Anti-blocking protection** - rotating proxies, randomized headers, retry logic
+- 📄 **Pagination support** - extracts filiais across multiple pages
+- ⏸️ **Idempotent processing** - skips rows with existing CNPJs
+- 🔒 **Secure credential management** - secrets folder for API keys and proxies
 
 ## Quick Start
 
@@ -40,62 +43,66 @@ Create the following files in the `secrets/` folder:
 }
 ```
 
-**secrets/webshare_proxies.json** (optional, only for filiais extraction)
-- Webshare proxy list for CNPJ.biz scraping
+**secrets/webshare_proxies.json** (required for filiais extraction)
+- Webshare proxy list for DiretorioBrasil.net scraping
+- Format: one proxy per line in the format `username:password@host:port`
 ```json
 {
   "proxies": [
-    "http://username:password@host:port"
+    "username1:password1@proxy1.webshare.io:9999",
+    "username2:password2@proxy2.webshare.io:9999"
   ]
 }
 ```
 
 ### 3. Run the Scraper
 
-**Simple Mode (Main CNPJ only):**
+**Recommended: Simple Mode (Main CNPJ + Filiais):**
 ```bash
 python run_cnpj_simple.py
 ```
 
-**Batch Mode (With filiais extraction):**
-```bash
-python run_cnpj_batch.py
-```
+This will:
+- Find the main CNPJ for each company using SerpAPI
+- Automatically extract all filiais from DiretorioBrasil.net
+- Write results to your Google Sheet with proper formatting and organization
 
 That's it! The results will be written to your Google Sheet.
 
 ## Usage
 
-### Simple Mode (Recommended)
-
-Use this mode to get only the main CNPJ for each company:
+### Main Script (Recommended)
 
 ```bash
 python run_cnpj_simple.py
 ```
 
-This script:
-- Reads company names from column A of your Google Sheet
-- Uses SerpAPI to find the main CNPJ
-- Writes results to columns C-F (cnpj, status, timestamp, notes)
-- Skips rows that already have a CNPJ filled
-- Does NOT extract filiais (branches)
+This script performs a complete CNPJ lookup with filiais extraction:
 
-### Batch Mode (Advanced)
+**What it does:**
+1. Reads company names from column A of your Google Sheet
+2. Uses SerpAPI to find the main CNPJ for each company
+3. Writes the Matriz (headquarters) row with:
+   - Column B: "Matriz" label
+   - Column C: Formatted CNPJ (XX.XXX.XXX/XXXX-XX)
+   - Columns D-F: Status, timestamp, notes
+4. Automatically scrapes DiretorioBrasil.net for all filiais
+5. Inserts filial rows immediately below the Matriz row
+6. Skips rows that already have a CNPJ filled (idempotent)
 
-Use this mode to extract filiais and related companies:
+**Features:**
+- ✅ Anti-blocking measures (rotating proxies, randomized headers, delays)
+- ✅ Pagination support (extracts filiais across multiple pages)
+- ✅ Duplicate detection (won't insert the same CNPJ twice)
+- ✅ Smart organization (all CNPJs for each company grouped together)
+
+### Legacy Batch Mode
 
 ```bash
 python run_cnpj_batch.py
 ```
 
-This script:
-- Does everything the simple mode does
-- Additionally scrapes CNPJ.biz to find all filiais
-- Inserts new rows for each filial under the parent company
-- Requires Webshare proxies (configured in secrets/webshare_proxies.json)
-
-**Note:** Batch mode may encounter blocking from CNPJ.biz. Use simple mode if you only need main CNPJs.
+This is the older batch processing script. Use `run_cnpj_simple.py` instead for better results.
 
 ## Google Sheet Format
 
@@ -103,12 +110,12 @@ Your Google Sheet should have the following columns:
 
 | Column | Name | Description |
 |--------|------|-------------|
-| A | company_name | Company name to search for |
-| B | filial_name | Filial/branch name (filled by batch mode) |
-| C | cnpj | CNPJ number in format 00.000.000/0000-00 |
-| D | status | Search status (ok, not_found, error) |
-| E | timestamp | ISO timestamp of when the search was performed |
-| F | notes | Additional notes about the search |
+| A | company_name | Company name to search for (INPUT) |
+| B | filial_name | "Matriz" for headquarters, "Filial" for branches (OUTPUT) |
+| C | cnpj | CNPJ number in format XX.XXX.XXX/XXXX-XX (OUTPUT) |
+| D | status | Search status: "ok", "not_found", "error" (OUTPUT) |
+| E | timestamp | ISO timestamp of when the search was performed (OUTPUT) |
+| F | notes | Source and additional details (OUTPUT) |
 
 ### Input Format
 
@@ -120,35 +127,36 @@ Before running the script, your sheet should look like:
 | Nubank | | | | | |
 | Banco do Brasil | | | | | |
 
-### Output Format (Simple Mode)
+### Output Format
 
-After running `run_cnpj_simple.py`:
-
-| company_name | filial_name | cnpj | status | timestamp | notes |
-|--------------|-------------|------|--------|-----------|-------|
-| Agibank | | 10.664.513/0001-50 | ok | 2025-11-20T22:30:00Z | Found via SerpAPI knowledge_graph |
-| Nubank | | 18.236.120/0001-58 | ok | 2025-11-20T22:30:15Z | Found via SerpAPI organic_results |
-| Unknown Company | | | not_found | 2025-11-20T22:30:30Z | No CNPJ found in SerpAPI |
-
-### Output Format (Batch Mode)
-
-After running `run_cnpj_batch.py`, filiais are inserted as new rows:
+After running `run_cnpj_simple.py`, your sheet will be organized with Matriz and filiais grouped together:
 
 | company_name | filial_name | cnpj | status | timestamp | notes |
 |--------------|-------------|------|--------|-----------|-------|
-| Agibank | | 10.664.513/0001-50 | ok | 2025-11-20T22:30:00Z | Found via SerpAPI |
-| Agibank | Agibank Filial Porto Alegre | 10.664.513/0002-31 | ok | 2025-11-20T22:30:05Z | Filial from CNPJ.biz |
-| Agibank | Agibank Filial São Paulo | 10.664.513/0003-12 | ok | 2025-11-20T22:30:05Z | Filial from CNPJ.biz |
+| Embraer S.A. | Matriz | 07.689.002/0001-89 | ok | 2025-11-20T22:30:00Z | Found via SerpAPI knowledge_graph |
+| Embraer S.A. | Filial | 07.689.002/0002-70 | ok | 2025-11-20T22:30:05Z | DiretorioBrasil.net |
+| Embraer S.A. | Filial | 07.689.002/0003-51 | ok | 2025-11-20T22:30:05Z | DiretorioBrasil.net |
+| Embraer S.A. | Filial | 07.689.002/0004-32 | ok | 2025-11-20T22:30:05Z | DiretorioBrasil.net |
+| Petrobras | Matriz | 33.000.167/0001-01 | ok | 2025-11-20T22:31:00Z | Found via SerpAPI knowledge_graph |
+| Petrobras | Filial | 33.000.167/0002-92 | ok | 2025-11-20T22:31:05Z | DiretorioBrasil.net |
+| Unknown Company | | | not_found | 2025-11-20T22:32:00Z | No CNPJ found in SerpAPI |
+
+**Key features:**
+- **Matriz rows** have "Matriz" in column B and formatted CNPJ in column C
+- **Filial rows** are inserted immediately below their Matriz
+- **All CNPJs** for each company are grouped together
+- **Failed lookups** have empty CNPJ and filial_name columns
 
 ## Project Structure
 
 ```
 company-cnpj-scraper/
-├── run_cnpj_simple.py      # Simple mode: main CNPJ lookup only
-├── run_cnpj_batch.py       # Batch mode: with filiais extraction
+├── run_cnpj_simple.py      # Main script: CNPJ lookup + filiais extraction
+├── run_cnpj_batch.py       # Legacy batch mode script
 ├── sheets.py               # Google Sheets API wrapper
-├── cnpj_lookup.py          # SerpAPI CNPJ lookup logic
-├── cnpjbiz_scraper.py      # CNPJ.biz scraper for filiais
+├── scraping/               # Scraping modules
+│   ├── __init__.py
+│   └── filiais_scraper.py  # DiretorioBrasil.net filiais scraper
 ├── secrets/                # Credentials (gitignored)
 │   ├── google_credentials.json
 │   ├── serpapi_key.json
@@ -181,26 +189,46 @@ pytest tests/ --cov=scraper --cov-report=html
 
 ## How It Works
 
-### Simple Mode (run_cnpj_simple.py)
+### Main Workflow (run_cnpj_simple.py)
 
-1. **Read Input**: Opens Google Sheet and reads company names from column A
-2. **SerpAPI Search**: For each company, queries SerpAPI with "{company_name} CNPJ"
-3. **Extract CNPJ**: Tries to extract CNPJ from:
-   - Knowledge graph (legal_identifier field)
-   - Organic search results (snippets and titles)
-4. **Validate**: Validates extracted CNPJs using regex pattern
-5. **Write Results**: Updates columns C-F with CNPJ, status, timestamp, and notes
-6. **Skip Existing**: Automatically skips rows that already have a CNPJ
+**Phase 1: Main CNPJ Lookup**
+1. Opens Google Sheet and reads company names from column A
+2. For each company without a CNPJ:
+   - Queries SerpAPI with "{company_name} CNPJ"
+   - Extracts CNPJ from knowledge graph or organic results
+   - Validates CNPJ format (14 digits)
+   - Formats CNPJ to Brazilian standard (XX.XXX.XXX/XXXX-XX)
+3. Writes Matriz row with:
+   - Column B: "Matriz"
+   - Column C: Formatted CNPJ
+   - Columns D-F: Status, timestamp, notes
 
-### Batch Mode (run_cnpj_batch.py)
+**Phase 2: Filiais Extraction**
+1. For each successfully found CNPJ:
+   - Builds DiretorioBrasil.net URL using company name slug and CNPJ
+   - Scrapes filiais page with anti-blocking measures:
+     * Rotating Webshare proxies
+     * Randomized User-Agent headers
+     * Random delays (1.5-4.5 seconds)
+     * Retry logic (5 attempts per request)
+   - Parses HTML to extract filial names and CNPJs
+   - Detects and follows pagination links
+2. Inserts filial rows immediately below Matriz row
+3. Updates row offset tracking to maintain correct positioning
 
-1. **Main CNPJ Lookup**: Same as simple mode (steps 1-6)
-2. **Filiais Extraction**: For each found CNPJ:
-   - Visits CNPJ.biz using Webshare proxies
-   - Scrapes "Ver Todas as Filiais" table
-   - Extracts razão social and CNPJ for each filial
-3. **Insert Rows**: Inserts new rows below parent company for each filial
-4. **Update Sheet**: Writes all filiais to Google Sheet with proper column mapping
+**Phase 3: Organization**
+- All CNPJs for each company are grouped together
+- Matriz row appears first, followed by all filiais
+- Subsequent companies are positioned correctly after insertions
+
+### Anti-Blocking Measures
+
+The scraper implements comprehensive anti-blocking protection:
+- **Proxy Rotation**: Automatically rotates through Webshare proxies on failures
+- **Randomized Headers**: User-Agent, Accept-Language, Referer headers
+- **Request Delays**: Random delays between 1.5-4.5 seconds
+- **Retry Logic**: Up to 5 attempts per request with proxy rotation
+- **Error Handling**: Graceful handling of 403, 422, 423, 429, 5xx errors
 
 ## CNPJ Validation
 
@@ -215,10 +243,11 @@ The tool validates CNPJ numbers using the official Brazilian algorithm with chec
 
 - **SerpAPI Dependency**: Requires a valid SerpAPI key (paid service after free tier)
 - **Rate Limits**: SerpAPI has rate limits based on your plan
-- **CNPJ.biz Blocking**: Batch mode may be blocked by CNPJ.biz (requires residential proxies)
+- **Proxy Requirement**: DiretorioBrasil.net scraping requires Webshare proxies
 - **Internet Connection**: Requires stable internet connection
 - **Google Sheets API**: Requires proper service account setup and permissions
-- **Data Accuracy**: CNPJ data depends on what's indexed by Google search
+- **Data Accuracy**: CNPJ data depends on what's indexed by Google and DiretorioBrasil.net
+- **Processing Time**: Filiais extraction adds ~2-5 seconds per company (due to anti-blocking delays)
 
 ## Troubleshooting
 
@@ -235,12 +264,13 @@ The tool validates CNPJ numbers using the official Brazilian algorithm with chec
 - Check that the service account has edit access to your Google Sheet
 - Ensure the sheet ID in `sheets.py` matches your sheet
 
-### Batch mode not finding filiais
+### Filiais not being extracted
 
-- CNPJ.biz actively blocks datacenter proxies
-- Verify your Webshare proxies are working in `secrets/webshare_proxies.json`
-- Consider using residential proxies instead of datacenter proxies
-- Use simple mode if you only need main CNPJs
+- DiretorioBrasil.net may block requests without proper proxies
+- Verify your Webshare proxies are configured in `secrets/webshare_proxies.json`
+- Check proxy format: `username:password@host:port` (one per line in JSON array)
+- Ensure proxies are active and not rate-limited
+- Check the console output for specific error messages
 
 ### Import errors
 
