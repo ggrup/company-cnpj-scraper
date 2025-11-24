@@ -64,6 +64,7 @@ def main():
     print("=" * 60)
     print("Batch CNPJ Lookup Script")
     print("=" * 60)
+    print("Debug: Starting script...")
     
     try:
         print("Opening Google Sheet...")
@@ -74,6 +75,10 @@ def main():
         if not all_values:
             print("Error: Sheet is empty")
             sys.exit(1)
+            
+        print(f"Debug: Found {len(all_values)} rows in the sheet (including header)")
+        if len(all_values) > 1:
+            print(f"Debug: First data row: {all_values[1]}")
         
         header = all_values[0]
         expected_header = ['company_name', 'website', 'cnpj', 'status', 'timestamp', 'notes']
@@ -97,15 +102,22 @@ def main():
             company_name = row[0].strip() if row[0] else ''
             existing_cnpj = row[2].strip() if len(row) > 2 and row[2] else ''
             
+            print(f"\nChecking row {row_num}:")
+            print(f"  Company: '{company_name}'")
+            print(f"  Existing CNPJ: '{existing_cnpj}'")
+            print(f"  Full row data: {row}")
+            
             if not company_name:
-                print(f"Skipping row {row_num}: Empty company name")
+                print(f"  -> Skipping: Empty company name")
                 skipped_count += 1
                 continue
             
             if existing_cnpj:
-                print(f"Skipping row {row_num}: {company_name} (CNPJ already filled)")
+                print(f"  -> Skipping: CNPJ already filled")
                 skipped_count += 1
                 continue
+                
+            print(f"\nProcessing row {row_num}: {company_name}")
             
             result = process_row(row_num, company_name)
             
@@ -118,7 +130,7 @@ def main():
             ]
             
             cell_range = f'B{row_num}:F{row_num}'
-            sheet.update(cell_range, [updates])
+            sheet.update(range_name=cell_range, values=[updates])
             
             processed_count += 1
             print(f"  Updated row {row_num} in sheet")
@@ -151,8 +163,20 @@ def main():
         
         print("=" * 60)
         print("Processing complete!")
+        print("\n" + "=" * 60)
+        print("Processing complete!")
+        print(f"Total rows in sheet: {len(all_values)-1}")
         print(f"Total rows processed: {processed_count}")
         print(f"Total rows skipped: {skipped_count}")
+        print("=" * 60)
+        
+        # Print a summary of the first 10 rows for debugging
+        print("\nFirst 10 rows in sheet:")
+        for i, row in enumerate(all_values[:11]):
+            status = "[HEADER]" if i == 0 else f"[ROW {i}]"
+            company = row[0] if len(row) > 0 else ""
+            cnpj = row[2] if len(row) > 2 else ""
+            print(f"{status} Company: {company[:30]}... | CNPJ: {cnpj}")
         print("=" * 60)
         
     except Exception as e:
