@@ -96,13 +96,13 @@ This script performs a complete CNPJ lookup with filiais extraction:
 - ✅ Duplicate detection (won't insert the same CNPJ twice)
 - ✅ Smart organization (all CNPJs for each company grouped together)
 
-### Legacy Batch Mode
+### Alternative Entry Point (Batch Mode)
 
 ```bash
 python run_cnpj_batch.py
 ```
 
-This is the older batch processing script. Use `run_cnpj_simple.py` instead for better results.
+This script now uses the same modern pipeline as `run_cnpj_simple.py` (SerpAPI + DiretorioBrasil.net with Webshare proxies). Both commands produce identical results.
 
 ## Google Sheet Format
 
@@ -152,19 +152,19 @@ After running `run_cnpj_simple.py`, your sheet will be organized with Matriz and
 ```
 company-cnpj-scraper/
 ├── run_cnpj_simple.py      # Main script: CNPJ lookup + filiais extraction
-├── run_cnpj_batch.py       # Legacy batch mode script
+├── run_cnpj_batch.py       # Alternative entry point (delegates to run_cnpj_simple.py)
 ├── sheets.py               # Google Sheets API wrapper
 ├── scraping/               # Scraping modules
 │   ├── __init__.py
-│   └── filiais_scraper.py  # DiretorioBrasil.net filiais scraper
+│   └── filiais_scraper.py  # DiretorioBrasil.net filiais scraper with Webshare proxies
 ├── secrets/                # Credentials (gitignored)
 │   ├── google_credentials.json
 │   ├── serpapi_key.json
 │   └── webshare_proxies.json
-├── scraper/                # Legacy scraper modules
+├── scraper/                # CNPJ validation utilities
 │   ├── search.py
 │   └── parser.py
-├── storage/                # Legacy CSV writer
+├── storage/                # CSV writer utilities
 │   └── csv_writer.py
 ├── tests/
 │   └── test_parser.py      # Unit tests
