@@ -2,12 +2,13 @@
 """
 Script to find and add filiais (branches) for existing CNPJs in the sheet.
 This only processes rows that have a CNPJ but haven't had their filiais processed yet.
+Uses DiretorioBrasil.net with Webshare proxies for reliable filiais extraction.
 """
 
 import sys
 from datetime import datetime
 from sheets import open_sheet
-from cnpjbiz_scraper import scrape_all_entities
+from scraping.filiais_scraper import scrape_all_filiais, write_filiais_to_sheet
 
 def main():
     print("=" * 60)
@@ -95,47 +96,26 @@ def main():
             print(f"\nProcessing filiais for {company_name} (CNPJ: {cnpj})")
             
             try:
-                # Clean CNPJ (remove formatting)
-                clean_cnpj = cnpj.replace('.', '').replace('/', '').replace('-', '')
+                # Scrape filiais using DiretorioBrasil.net with Webshare proxies
+                print(f"  Scraping DiretorioBrasil.net for filiais...")
+                filial_entries = scrape_all_filiais(company_name, cnpj)
                 
-                # Scrape filiais
-                print(f"  Scraping CNPJ.biz for related companies...")
-                all_entities = scrape_all_entities(clean_cnpj)
-                
-                if all_entities:
-                    print(f"  Found {len(all_entities)} related entities on CNPJ.biz")
-                    timestamp = datetime.utcnow().isoformat() + 'Z'
+                if filial_entries:
+                    print(f"  Found {len(filial_entries)} filiais on DiretorioBrasil.net")
                     
-                    # Add filiais to sheet
-                    added_count = 0
-                    for ent in all_entities:
-                        # Skip the main company (we already have it)
-                        if ent['cnpj'] == clean_cnpj:
-                            continue
-                            
-                        # Skip if CNPJ already exists in sheet
-                        if ent['cnpj'] in existing_cnpjs:
-                            print(f"    Skipping duplicate CNPJ: {ent['cnpj']}")
-                            continue
-                            
-                        new_row = [
-                            company_name,
-                            ent["razao_social"],
-                            ent["cnpj"],
-                            "ok",
-                            timestamp,
-                            "cnpj.biz"
-                        ]
-                        sheet.append_row(new_row)
-                        existing_cnpjs.add(ent['cnpj'])
-                        added_count += 1
-                        print(f"    Added: {ent['razao_social']} ({ent['cnpj']}) - {ent['tipo']}")
+                    # Add filiais to sheet using the dedicated writer
+                    rows_inserted = write_filiais_to_sheet(sheet, company_name, filial_entries, insert_after_row=row_num)
                     
-                    if added_count > 0:
+                    if rows_inserted > 0:
                         processed_count += 1
-                        print(f"  Added {added_count} filiais for {company_name}")
+                        print(f"  Added {rows_inserted} filiais for {company_name}")
+                        
+                        # Update existing_cnpjs set with new CNPJs
+                        for entry in filial_entries:
+                            clean = entry['cnpj'].replace('.', '').replace('/', '').replace('-', '')
+                            existing_cnpjs.add(clean)
                     else:
-                        print("  No new filiais to add")
+                        print("  No new filiais to add (all duplicates)")
                         skipped_count += 1
                 else:
                     print(f"  No filiais found for {company_name}")
