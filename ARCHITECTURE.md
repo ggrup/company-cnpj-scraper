@@ -153,8 +153,9 @@ for i in range(1, len(all_values)):
 - Old CSV-based I/O
 - Not used in current implementation
 
-**`run_cnpj_batch.py`** (Legacy)
-- Older batch processing script
+**`run_cnpj_batch.py`** (Alternative Entry Point)
+- Delegates to `run_cnpj_simple.py` for unified pipeline
+- Uses same SerpAPI + DiretorioBrasil.net architecture
 - Use `run_cnpj_simple.py` instead
 
 ### Data Flow
@@ -279,20 +280,20 @@ The scraper implements a comprehensive anti-blocking strategy for DiretorioBrasi
 ```
 company-cnpj-scraper/
 ├── run_cnpj_simple.py      # Main script: CNPJ lookup + filiais
-├── run_cnpj_batch.py       # Legacy batch mode script
+├── run_cnpj_batch.py       # Alternative entry point (delegates to run_cnpj_simple.py)
 ├── sheets.py               # Google Sheets API wrapper
 ├── scraping/               # Scraping modules
 │   ├── __init__.py
-│   └── filiais_scraper.py  # DiretorioBrasil.net scraper
+│   └── filiais_scraper.py  # DiretorioBrasil.net scraper with Webshare proxies
 ├── secrets/                # Credentials (gitignored)
 │   ├── google_credentials.json
 │   ├── serpapi_key.json
 │   └── webshare_proxies.json
-├── scraper/                # Legacy scraper modules
+├── scraper/                # CNPJ validation utilities
 │   ├── __init__.py
-│   ├── search.py          # Old Google search scraper
-│   └── parser.py          # CNPJ validation utilities
-├── storage/                # Legacy CSV writer
+│   ├── search.py          # Search utilities
+│   └── parser.py          # CNPJ validation algorithms
+├── storage/                # CSV writer utilities
 │   ├── __init__.py
 │   └── csv_writer.py
 ├── tests/
